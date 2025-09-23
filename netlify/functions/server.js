@@ -26,64 +26,75 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 // Rota para listar todos os produtos, filtrar por categoria, loja e buscar por termo
 app.get('/api/produtos', async (req, res) => {
     // Recupera e sanitiza os query params
-    let { categoria, termo, loja, page = 1, limit = 50, orderBy = 'nome_asc' } = req.query;
+    const { categoria, termo, loja, fuzzy = 'false', page = 1, limit = 1000, orderBy = 'nome_asc' } = req.query; // limit alto para debug (todos itens)
     
-    // Sanitização: remove espaços extras e converte para string
-    if (categoria) categoria = categoria.toString().trim();
-    if (loja) loja = loja.toString().trim();
-    if (termo) termo = termo.toString().trim();
+    // Sanitização: remove espaços extras
+    const cleanCategoria = categoria ? categoria.toString().trim() : null;
+    const cleanLoja = loja ? loja.toString().trim() : null;
+    const cleanTermo = termo ? termo.toString().trim() : null;
+    const isFuzzy = fuzzy.toString().toLowerCase() === 'true';
     
-    // Paginação: converte para números inteiros (aplicada na query, mas sem metadados na resposta)
-    const pageNum = parseInt(page) || 1;
-    const limitNum = Math.min(parseInt(limit) || 50, 100); // Limite máximo de 100
-    const offset = (pageNum - 1) * limitNum;
+    // LOGS PARA DEBUG: Veja isso no console/Netlify
+    console.log('=== DEBUG FILTROS ===');
+    console.log('Params recebidos:', { categoria: cleanCategoria, loja: cleanLoja, termo: cleanTermo, fuzzy: isFuzzy });
+    console.log('Paginação:', { page: parseInt(page), limit: parseInt(limit) });
     
-    let query = supabase.from('produtos').select('*', { count: 'exact' }); // Adicionei count para total interno
+    let query = supabase.from('produtos').select('*');
 
-    // Filtro por categoria (case-insensitive e parcial com ilike)
-    if (categoria) {
-        query = query.ilike('categoria', `%${categoria}%`);
-    }
-    
-    // Filtro por loja (case-insensitive e parcial com ilike)
-    if (loja) {
-        query = query.ilike('loja', `%${loja}%`);
-    }
-
-    // Filtro por termo de busca (nome ou descrição) - Mantido como estava, pois está perfeito
-    if (termo) {
-        query = query.or(`nome.ilike.%${termo}%,descricao.ilike.%${termo}%`);
-    }
-
-    // Ordenação (ex: nome_asc, preco_desc, created_at_desc)
-    if (orderBy) {
-        const [column, direction] = orderBy.split('_');
-        const validColumns = ['nome', 'preco', 'created_at', 'id']; // Ajuste conforme suas colunas
-        const validDirections = ['asc', 'desc'];
-        if (validColumns.includes(column) && validDirections.includes(direction)) {
-            query = query.order(column, { ascending: direction === 'asc' });
+    // Filtro por categoria
+    if (cleanCategoria) {
+        if (isFuzzy) {
+            query = query.ilike('categoria', `%${cleanCategoria}%`);
+            console.log(`Filtro categoria (fuzzy): categoria ILIKE '%${cleanCategoria}%'`);
         } else {
-            // Ordenação padrão se inválido
-            query = query.order('nome', { ascending: true });
+            query = query.eq('categoria', cleanCategoria);
+            console.log(`Filtro categoria (exato): categoria = '${cleanCategoria}'`);
         }
-    } else {
-        // Ordenação padrão
-        query = query.order('nome', { ascending: true });
+    }
+    
+    // Filtro por loja
+    if (cleanLoja) {
+        if (isFuzzy) {
+            query = query.ilike('loja', `%${cleanLoja}%`);
+            console.log(`Filtro loja (fuzzy): loja ILIKE '%${cleanLoja}%'`);
+        } else {
+            query = query.eq('loja', cleanLoja);
+            console.log(`Filtro loja (exato): loja = '${cleanLoja}'`);
+        }
     }
 
-    // Paginação (aplicada, mas resposta só com data)
-    query = query.range(offset, offset + limitNum - 1);
+    // Filtro por termo de busca (nome ou descrição) - Mantido original, pois funcionava
+    if (cleanTermo) {
+        const orCondition = `nome.ilike.%${cleanTermo}%,descricao.ilike.%${cleanTermo}%`;
+        query = query.or(orCondition);
+        console.log(`Filtro termo: OR (nome ILIKE '%${cleanTermo}%' OR descricao ILIKE '%${cleanTermo}%')`);
+    }
 
-    const { data, error } = await query; // count está disponível, mas não usado na resposta
+    // Ordenação simples (padrão por nome asc)
+    query = query.order('nome', { ascending: true });
+    console.log('Ordenação: nome ASC');
+
+    // Paginação (desabilitada por padrão para debug; use params para ativar)
+    const pageNum = parseInt(page) || 1;
+    const limitNum = Math.min(parseInt(limit) || 1000, 1000); // Máx 1000 para evitar overload
+    const offset = (pageNum - 1) * limitNum;
+    query = query.range(offset, offset + limitNum - 1);
+    console.log(`Paginação aplicada: offset=${offset}, limit=${limitNum}`);
+
+    console.log('Query final montada. Executando...');
+
+    const { data, error } = await query;
 
     if (error) {
         console.error('Erro ao buscar produtos:', error);
         return res.status(500).json({ error: `Erro ao buscar produtos. Detalhes: ${error.message}` });
     }
 
-    // Resposta compatível: APENAS o array de produtos (como no original)
-    // Isso corrige o erro .forEach no frontend
-    res.status(200).json(data || []); // Retorna array vazio se null
+    console.log(`Resultado: ${data ? data.length : 0} produtos encontrados.`);
+    console.log('=== FIM DEBUG ===');
+
+    // Resposta: APENAS o array de produtos
+    res.status(200).json(data || []);
 });
 
 // Rota para cadastrar um novo produto com upload de imagem (mantida inalterada)
@@ -142,5 +153,4 @@ app.post('/api/cadastrar-produto', upload.single('imagem'), async (req, res) => 
 });
 
 // Exporta a aplicação para ser usada pelo Netlify Functions.
-// Esta linha é a principal correção para o erro de 'handler not found'.
 module.exports.handler = serverless(app);

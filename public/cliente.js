@@ -1,8 +1,10 @@
 document.addEventListener('DOMContentLoaded', function() {
-    // Função principal para carregar os produtos, agora com filtros de categoria e loja
-    async function carregarProdutos(filtro = {}) {
-        const { categoria, termoBusca, loja } = filtro;
+    // Variáveis para trackear filtros ativos (para combinação)
+    let currentCategoria = null;
+    let currentLoja = null;
 
+    // Função principal para carregar os produtos, agora com filtros combinados
+    async function carregarProdutos() {
         try {
             const productsContainer = document.getElementById('products-container');
             if (!productsContainer) {
@@ -13,19 +15,30 @@ document.addEventListener('DOMContentLoaded', function() {
             let url = '/api/produtos';
             const params = new URLSearchParams();
 
-            if (categoria) {
-                params.append('categoria', categoria);
+            // Adiciona fuzzy por padrão para flexibilidade (case-insensitive e parcial)
+            params.append('fuzzy', 'true');
+
+            // Adiciona filtros ativos
+            if (currentCategoria) {
+                params.append('categoria', currentCategoria);
             }
+            if (currentLoja) {
+                params.append('loja', currentLoja);
+            }
+            // Para search, vamos pegar do input (se não, usa o atual)
+            const searchInput = document.querySelector('.search-bar input');
+            const termoBusca = searchInput ? searchInput.value.trim() : '';
             if (termoBusca) {
                 params.append('termo', termoBusca);
-            }
-            if (loja) {
-                params.append('loja', loja);
             }
 
             if (params.toString()) {
                 url += `?${params.toString()}`;
             }
+
+            // LOG PARA DEBUG: Veja no console o que está sendo enviado
+            console.log('URL da requisição:', url);
+            console.log('Filtros ativos:', { categoria: currentCategoria, loja: currentLoja, termo: termoBusca });
 
             const response = await fetch(url);
             
@@ -35,9 +48,16 @@ document.addEventListener('DOMContentLoaded', function() {
             }
 
             const produtos = await response.json();
+            
+            // LOG PARA DEBUG: Veja o que foi recebido
+            console.log('Produtos recebidos:', produtos.length, 'itens');
+            if (produtos.length > 0) {
+                console.log('Exemplo de produto:', produtos[0]); // Primeiro item para verificar campos
+            }
+
             productsContainer.innerHTML = '';
 
-            if (produtos.length === 0) {
+            if (!Array.isArray(produtos) || produtos.length === 0) {
                 productsContainer.innerHTML = '<p class="no-products">Nenhum produto encontrado.</p>';
                 return;
             }
@@ -46,7 +66,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 const productCard = document.createElement('div');
                 productCard.className = 'product-card';
                 productCard.innerHTML = `
-                    <img src="${produto.imagem_url}" alt="${produto.nome}"  onerror="this.src='https://via.placeholder.com/300x200?text=Imagem+Nao+Disponivel'">
+                    <img src="${produto.imagem_url}" alt="${produto.nome}" onerror="this.src='https://via.placeholder.com/300x200?text=Imagem+Nao+Disponivel'">
                     <h3>${produto.nome}</h3>
                     <p>${produto.descricao}</p>
                     <strong>R$ ${parseFloat(produto.preco).toFixed(2)}</strong><br>
@@ -64,7 +84,7 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
 
-    // Função para cadastrar produto via API
+    // Função para cadastrar produto via API (mantida inalterada)
     async function cadastrarProduto(dados) {
         try {
             const response = await fetch('/api/cadastrar-produto', {
@@ -93,7 +113,7 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
 
-    // Lógica para o formulário de cadastro
+    // Lógica para o formulário de cadastro (mantida inalterada)
     const formProduto = document.getElementById('cadastro-produto-form');
     if (formProduto) {
         formProduto.addEventListener('submit', async (e) => {
@@ -111,6 +131,8 @@ document.addEventListener('DOMContentLoaded', function() {
             if (resultado.success) {
                 alert('Produto cadastrado com sucesso!');
                 formProduto.reset();
+                // Recarrega produtos após cadastro
+                carregarProdutos();
             } else {
                 alert(`Erro: ${resultado.error}`);
             }
@@ -128,35 +150,42 @@ document.addEventListener('DOMContentLoaded', function() {
         const filterButtons = document.querySelectorAll('.filters button');
         const storeButtons = document.querySelectorAll('.stores button');
 
-        carregarProdutos({});
+        // Carrega produtos iniciais sem filtros
+        carregarProdutos();
 
+        // Filtros de Categoria: Agora permite múltiplos? Não, mas ativa apenas um por grupo
         filterButtons.forEach(button => {
             button.addEventListener('click', function() {
+                // Remove active apenas do grupo de categorias
                 filterButtons.forEach(btn => btn.classList.remove('active'));
-                storeButtons.forEach(btn => btn.classList.remove('active'));
                 this.classList.add('active');
-                const categoria = this.dataset.categoria;
-                carregarProdutos({ categoria });
+                currentCategoria = this.dataset.categoria || null; // Atualiza o filtro ativo
+                console.log('Categoria selecionada:', currentCategoria); // Debug
+                carregarProdutos(); // Recarrega com todos os filtros ativos
             });
         });
         
+        // Filtros de Loja: Similar, grupo separado
         storeButtons.forEach(button => {
             button.addEventListener('click', function() {
+                // Remove active apenas do grupo de lojas
                 storeButtons.forEach(btn => btn.classList.remove('active'));
-                filterButtons.forEach(btn => btn.classList.remove('active'));
                 this.classList.add('active');
-                const loja = this.dataset.loja;
-                carregarProdutos({ loja });
+                currentLoja = this.dataset.loja || null; // Atualiza o filtro ativo
+                console.log('Loja selecionada:', currentLoja); // Debug
+                carregarProdutos(); // Recarrega com todos os filtros ativos
             });
         });
 
+        // Search Button: Limpa categorias e lojas? Não mais, mas pode combinar com elas
         if (searchButton) {
             searchButton.addEventListener('click', function(e) {
                 e.preventDefault();
                 const termoBusca = searchInput.value.trim();
-                filterButtons.forEach(btn => btn.classList.remove('active'));
-                storeButtons.forEach(btn => btn.classList.remove('active'));
-                carregarProdutos({ termoBusca });
+                // Não limpa mais os outros filtros – permite combinação
+                // Se quiser limpar: currentCategoria = null; currentLoja = null; e remove active
+                console.log('Busca por termo:', termoBusca); // Debug
+                carregarProdutos();
             });
         }
 
@@ -165,10 +194,23 @@ document.addEventListener('DOMContentLoaded', function() {
                 if (e.key === 'Enter') {
                     e.preventDefault();
                     const termoBusca = searchInput.value.trim();
-                    filterButtons.forEach(btn => btn.classList.remove('active'));
-                    storeButtons.forEach(btn => btn.classList.remove('active'));
-                    carregarProdutos({ termoBusca });
+                    console.log('Busca por Enter:', termoBusca); // Debug
+                    carregarProdutos();
                 }
+            });
+        }
+
+        // Botão Limpar Filtros (adicione no HTML: <button id="clear-filters">Limpar</button>)
+        const clearButton = document.getElementById('clear-filters');
+        if (clearButton) {
+            clearButton.addEventListener('click', function() {
+                currentCategoria = null;
+                currentLoja = null;
+                searchInput.value = ''; // Limpa search
+                filterButtons.forEach(btn => btn.classList.remove('active'));
+                storeButtons.forEach(btn => btn.classList.remove('active'));
+                console.log('Filtros limpos'); // Debug
+                carregarProdutos();
             });
         }
     }
