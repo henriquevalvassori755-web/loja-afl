@@ -5,20 +5,24 @@ const { createClient } = require('@supabase/supabase-js');
 const path = require('path');
 const multer = require('multer');
 const serverless = require('serverless-http'); // <-- Adicionada a biblioteca
+
 // Inicializa o aplicativo Express
 const app = express();
+
 // Configura o multer para lidar com o upload de arquivos na memória
 const upload = multer({ storage: multer.memoryStorage() });
+
 // Configura o middleware para servir arquivos estáticos da pasta 'public'
 app.use(express.static(path.join(__dirname, 'public')));
 app.use(express.json()); // Middleware para processar JSON
-// Recupera as variáveis de ambiente para conexão com o Supabase
 
-// Inicializa o cliente Supabase
+// Recupera as variáveis de ambiente para conexão com o Supabase
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY;
+
 // Inicializa o cliente Supabase
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
 // Rota para listar todos os produtos, filtrar por categoria, loja e buscar por termo
 app.get('/api/produtos', async (req, res) => {
     // Recupera e sanitiza os query params
@@ -29,28 +33,32 @@ app.get('/api/produtos', async (req, res) => {
     if (loja) loja = loja.toString().trim();
     if (termo) termo = termo.toString().trim();
     
-    // Paginação: converte para números inteiros
+    // Paginação: converte para números inteiros (aplicada na query, mas sem metadados na resposta)
     const pageNum = parseInt(page) || 1;
-    const limitNum = Math.min(parseInt(limit) || 50, 100); // Limite máximo de 100 para evitar overload
+    const limitNum = Math.min(parseInt(limit) || 50, 100); // Limite máximo de 100
     const offset = (pageNum - 1) * limitNum;
     
-    let query = supabase.from('produtos').select('*');
-    // Filtro por categoria (agora case-insensitive e parcial com ilike)
+    let query = supabase.from('produtos').select('*', { count: 'exact' }); // Adicionei count para total interno
+
+    // Filtro por categoria (case-insensitive e parcial com ilike)
     if (categoria) {
         query = query.ilike('categoria', `%${categoria}%`);
     }
-    // Filtro por loja (agora case-insensitive e parcial com ilike)
+    
+    // Filtro por loja (case-insensitive e parcial com ilike)
     if (loja) {
         query = query.ilike('loja', `%${loja}%`);
     }
-// Filtro por termo de busca (nome ou descrição) - Mantido como estava, pois está perfeito
+
+    // Filtro por termo de busca (nome ou descrição) - Mantido como estava, pois está perfeito
     if (termo) {
         query = query.or(`nome.ilike.%${termo}%,descricao.ilike.%${termo}%`);
     }
+
     // Ordenação (ex: nome_asc, preco_desc, created_at_desc)
     if (orderBy) {
         const [column, direction] = orderBy.split('_');
-        const validColumns = ['nome', 'preco', 'created_at']; // Ajuste conforme suas colunas
+        const validColumns = ['nome', 'preco', 'created_at', 'id']; // Ajuste conforme suas colunas
         const validDirections = ['asc', 'desc'];
         if (validColumns.includes(column) && validDirections.includes(direction)) {
             query = query.order(column, { ascending: direction === 'asc' });
@@ -62,33 +70,34 @@ app.get('/api/produtos', async (req, res) => {
         // Ordenação padrão
         query = query.order('nome', { ascending: true });
     }
-    // Paginação
+
+    // Paginação (aplicada, mas resposta só com data)
     query = query.range(offset, offset + limitNum - 1);
-    const { data, error, count } = await query; // Adicionei 'count' para total de páginas (opcional)
+
+    const { data, error } = await query; // count está disponível, mas não usado na resposta
+
     if (error) {
         console.error('Erro ao buscar produtos:', error);
         return res.status(500).json({ error: `Erro ao buscar produtos. Detalhes: ${error.message}` });
     }
-    // Resposta com paginação (opcional, mas útil para frontend)
-    res.status(200).json({
-        data,
-        pagination: {
-            page: pageNum,
-            limit: limitNum,
-            total: count || data.length, // Se count não for usado, use length
-            totalPages: count ? Math.ceil(count / limitNum) : 1
-        }
-    });
+
+    // Resposta compatível: APENAS o array de produtos (como no original)
+    // Isso corrige o erro .forEach no frontend
+    res.status(200).json(data || []); // Retorna array vazio se null
 });
+
 // Rota para cadastrar um novo produto com upload de imagem (mantida inalterada)
 app.post('/api/cadastrar-produto', upload.single('imagem'), async (req, res) => {
     const { nome, categoria, descricao, preco, loja, link } = req.body;
     const imagemFile = req.file;
+
     if (!imagemFile) {
         return res.status(400).json({ error: 'Nenhuma imagem foi enviada.' });
     }
+
     const fileName = `${Date.now()}-${imagemFile.originalname}`;
     const filePath = `produtos/${fileName}`;
+
     try {
         const { error: uploadError } = await supabase.storage
             .from('imagens-produtos')
@@ -96,14 +105,17 @@ app.post('/api/cadastrar-produto', upload.single('imagem'), async (req, res) => 
                 contentType: imagemFile.mimetype,
             });
 
-             if (uploadError) {
+        if (uploadError) {
             console.error('Erro no upload da imagem:', uploadError);
             return res.status(500).json({ error: 'Erro ao fazer upload da imagem.' });
         }
+
         const { data: publicUrlData } = supabase.storage
             .from('imagens-produtos')
             .getPublicUrl(filePath);
+
         const imagem_url = publicUrlData.publicUrl;
+
         const { error: insertError, data: insertData } = await supabase
             .from('produtos')
             .insert([{
@@ -115,17 +127,20 @@ app.post('/api/cadastrar-produto', upload.single('imagem'), async (req, res) => 
                 imagem_url,
                 link
             }]);
+
         if (insertError) {
             await supabase.storage.from('imagens-produtos').remove([filePath]);
             console.error('Erro ao cadastrar produto:', insertError);
             return res.status(500).json({ error: 'Erro ao cadastrar produto.' });
         }
+
         res.status(201).json({ message: 'Produto cadastrado com sucesso!', id: insertData[0].id });
     } catch (err) {
         console.error('Erro no servidor:', err);
         res.status(500).json({ error: 'Erro no servidor.' });
     }
 });
+
 // Exporta a aplicação para ser usada pelo Netlify Functions.
 // Esta linha é a principal correção para o erro de 'handler not found'.
 module.exports.handler = serverless(app);
