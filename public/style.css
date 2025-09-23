@@ -103,7 +103,16 @@ header h1 {
     border-radius: 5px;
     margin-bottom: 1rem;
 }
-
+#clear-filters{
+    padding: 10px 20px;
+    border: 1px solid var(--light-gray);
+    background-color: var(--light);
+    color: var(--dark);
+    border-radius: 5px;
+    cursor: pointer;
+    font-weight: 500;
+    transition: all 0.3s ease;
+}
 .product-card h3 {
     font-size: 1.1em;
     color: var(--secondary);
