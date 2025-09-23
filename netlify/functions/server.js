@@ -1,112 +1,121 @@
 // Importa as bibliotecas necessárias
-// O nome do arquivo pode ser main.js, products.js ou similar.
+require('dotenv').config();
+const express = require('express');
+const { createClient } = require('@supabase/supabase-js');
+const path = require('path');
+const multer = require('multer');
+const serverless = require('serverless-http'); // <-- Adicionada a biblioteca
 
-// Variáveis para rastrear o estado dos filtros
-let filtroCategoriaAtivo = 'all';
-let filtroLojaAtivo = 'all';
-let termoDeBuscaAtivo = '';
+// Inicializa o aplicativo Express
+const app = express();
 
-// Função para carregar e filtrar produtos da API
-async function carregarEFiltrarProdutos() {
-    try {
-        console.log("Chamando a API com filtros...");
-        
-        // Constrói a URL da API com os parâmetros de filtro e busca
-        const params = new URLSearchParams();
-        if (filtroCategoriaAtivo !== 'all') {
-            params.append('categoria', filtroCategoriaAtivo);
-        }
-        if (filtroLojaAtivo !== 'all') {
-            params.append('loja', filtroLojaAtivo);
-        }
-        if (termoDeBuscaAtivo !== '') {
-            params.append('termo', termoDeBuscaAtivo);
-        }
+// Configura o multer para lidar com o upload de arquivos na memória
+const upload = multer({ storage: multer.memoryStorage() });
 
-        const url = `/api/produtos?${params.toString()}`;
-        
-        const productsContainer = document.getElementById('products-container');
-        productsContainer.innerHTML = '<p class="loading">Carregando produtos...</p>';
+// Configura o middleware para servir arquivos estáticos da pasta 'public'
+app.use(express.static(path.join(__dirname, 'public')));
+app.use(express.json()); // Middleware para processar JSON
 
-        const response = await fetch(url);
-        const produtos = await response.json();
+// Recupera as variáveis de ambiente para conexão com o Supabase
+const SUPABASE_URL = process.env.SUPABASE_URL;
+const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY;
 
-        if (!response.ok) {
-            throw new Error(produtos.error || 'Erro ao carregar produtos.');
-        }
+// Inicializa o cliente Supabase
+const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-        productsContainer.innerHTML = '';
-        if (produtos.length === 0) {
-            productsContainer.innerHTML = '<p class="no-products">Nenhum produto encontrado com esses filtros.</p>';
-            return;
-        }
 
-        produtos.forEach(produto => {
-            const productCard = document.createElement('div');
-            productCard.className = 'product-card';
-            
-            productCard.innerHTML = `
-                <img src="${produto.imagem_url}" alt="${produto.nome}" class="product-img" onerror="this.src='https://via.placeholder.com/300x200?text=Imagem+Não+Disponível'">
-                <div class="product-info">
-                    <h3 class="product-title">${produto.nome}</h3>
-                    <p class="product-description">${produto.descricao}</p>
-                    <p class="product-store">Loja: ${produto.loja}</p>
-                    <span class="product-price">R$ ${parseFloat(produto.preco).toFixed(2)}</span>
-                    <a href="${produto.link}" class="product-link-btn" target="_blank">Ver Oferta</a>
-                </div>
-            `;
-            productsContainer.appendChild(productCard);
-        });
-    } catch (error) {
-        console.error('Erro inesperado:', error);
-        document.getElementById('products-container').innerHTML = `<p class="error">Erro: ${error.message}</p>`;
+
+
+
+
+
+// Rota para listar todos os produtos, filtrar por categoria, loja e buscar por termo
+app.get('/api/produtos', async (req, res) => {
+    const { categoria, termo, loja } = req.query;
+    
+    let query = supabase.from('produtos').select('*');
+
+    // Filtro por categoria
+    if (categoria) {
+        query = query.eq('categoria', categoria);
     }
-}
+    
+    // Filtro por loja
+    if (loja) {
+        query = query.eq('loja', loja);
+    }
 
-// Inicialização e configuração de eventos
-document.addEventListener('DOMContentLoaded', function() {
-    if (document.getElementById('products-container')) {
-        carregarEFiltrarProdutos();
-        
-        const filterButtons = document.querySelectorAll('.filter-btn');
-        const searchInput = document.querySelector('.search-bar input');
-        const searchButton = document.querySelector('.search-bar button');
-        
-        if (filterButtons.length > 0) {
-            filterButtons.forEach(button => {
-                button.addEventListener('click', function() {
-                    const parentDiv = this.parentElement;
-                    const buttonsInGroup = parentDiv.querySelectorAll('.filter-btn');
-                    buttonsInGroup.forEach(btn => btn.classList.remove('active'));
-                    this.classList.add('active');
+    // Filtro por termo de busca (nome ou descrição)
+    if (termo) {
+        query = query.or(`nome.ilike.%${termo}%,descricao.ilike.%${termo}%`);
+    }
 
-                    const category = this.getAttribute('data-category');
-                    const store = this.getAttribute('data-store');
-                    if (category) {
-                        filtroCategoriaAtivo = category;
-                    }
-                    if (store) {
-                        filtroLojaAtivo = store;
-                    }
-                    
-                    carregarEFiltrarProdutos();
-                });
+    const { data, error } = await query;
+
+    if (error) {
+        console.error('Erro ao buscar produtos:', error);
+        return res.status(500).json({ error: `Erro ao buscar produtos. Detalhes: ${error.message}` });
+    }
+
+    res.status(200).json(data);
+});
+
+// Rota para cadastrar um novo produto com upload de imagem
+app.post('/api/cadastrar-produto', upload.single('imagem'), async (req, res) => {
+    const { nome, categoria, descricao, preco, loja, link } = req.body;
+    const imagemFile = req.file;
+
+    if (!imagemFile) {
+        return res.status(400).json({ error: 'Nenhuma imagem foi enviada.' });
+    }
+
+    const fileName = `${Date.now()}-${imagemFile.originalname}`;
+    const filePath = `produtos/${fileName}`;
+
+    try {
+        const { error: uploadError } = await supabase.storage
+            .from('imagens-produtos')
+            .upload(filePath, imagemFile.buffer, {
+                contentType: imagemFile.mimetype,
             });
-        }
-        
-        if (searchButton && searchInput) {
-            const aplicarBusca = () => {
-                termoDeBuscaAtivo = searchInput.value;
-                carregarEFiltrarProdutos();
-            };
 
-            searchButton.addEventListener('click', aplicarBusca);
-            
-            searchInput.addEventListener('keypress', function(e) {
-                if (e.key === 'Enter') {
-                    aplicarBusca();
-                }
-            });
+        if (uploadError) {
+            console.error('Erro no upload da imagem:', uploadError);
+            return res.status(500).json({ error: 'Erro ao fazer upload da imagem.' });
         }
+
+        const { data: publicUrlData } = supabase.storage
+            .from('imagens-produtos')
+            .getPublicUrl(filePath);
+
+        const imagem_url = publicUrlData.publicUrl;
+
+        const { error: insertError } = await supabase
+            .from('produtos')
+            .insert([{
+                nome,
+                categoria,
+                descricao,
+                preco,
+                loja,
+                imagem_url,
+                link
+            }]);
+
+        if (insertError) {
+            await supabase.storage.from('imagens-produtos').remove([filePath]);
+            console.error('Erro ao cadastrar produto:', insertError);
+            return res.status(500).json({ error: 'Erro ao cadastrar produto.' });
+        }
+
+        res.status(201).json({ message: 'Produto cadastrado com sucesso!' });
+    } catch (err) {
+        console.error('Erro no servidor:', err);
+        res.status(500).json({ error: 'Erro no servidor.' });
     }
 });
+
+
+// Exporta a aplicação para ser usada pelo Netlify Functions.
+// Esta linha é a principal correção para o erro de 'handler not found'.
+module.exports.handler = serverless(app);
