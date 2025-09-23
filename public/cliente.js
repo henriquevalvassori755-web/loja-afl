@@ -1,45 +1,46 @@
 document.addEventListener('DOMContentLoaded', function() {
-    // Variáveis para trackear filtros ativos (para combinação)
+    // Variáveis para rastrear filtros ativos
     let currentCategoria = null;
     let currentLoja = null;
+    let currentSearchTerm = '';
 
-    // Função principal para carregar os produtos, agora com filtros combinados
+    // Seletores para os elementos do HTML
+    const productsContainer = document.getElementById('products-container');
+    const searchInput = document.querySelector('.search-bar input');
+    const searchButton = document.querySelector('.search-bar button');
+    const categoryButtons = document.querySelectorAll('.category-filters .filter-btn');
+    const storeButtons = document.querySelectorAll('.stores .filter-btn');
+    const clearButton = document.getElementById('clear-filters');
+    const formProduto = document.getElementById('cadastro-produto-form');
+
+    // Função principal para carregar os produtos
     async function carregarProdutos() {
+        if (!productsContainer) {
+            console.error("Elemento products-container não encontrado.");
+            return;
+        }
+
+        let url = '/api/produtos';
+        const params = new URLSearchParams();
+
+        // Adiciona os filtros ativos na URL
+        if (currentCategoria && currentCategoria !== 'todos') {
+            params.append('categoria', currentCategoria);
+        }
+        if (currentLoja) {
+            params.append('loja', currentLoja);
+        }
+        if (currentSearchTerm) {
+            params.append('termo', currentSearchTerm);
+        }
+
+        if (params.toString()) {
+            url += `?${params.toString()}`;
+        }
+
+        console.log('URL da requisição:', url); // DEBUG
+        
         try {
-            const productsContainer = document.getElementById('products-container');
-            if (!productsContainer) {
-                console.log("Elemento products-container não encontrado. Verifique seu HTML.");
-                return;
-            }
-
-            let url = '/api/produtos';
-            const params = new URLSearchParams();
-
-            // Adiciona fuzzy por padrão para flexibilidade (case-insensitive e parcial)
-            params.append('fuzzy', 'true');
-
-            // Adiciona filtros ativos
-            if (currentCategoria) {
-                params.append('categoria', currentCategoria);
-            }
-            if (currentLoja) {
-                params.append('loja', currentLoja);
-            }
-            // Para search, vamos pegar do input (se não, usa o atual)
-            const searchInput = document.querySelector('.search-bar input');
-            const termoBusca = searchInput ? searchInput.value.trim() : '';
-            if (termoBusca) {
-                params.append('termo', termoBusca);
-            }
-
-            if (params.toString()) {
-                url += `?${params.toString()}`;
-            }
-
-            // LOG PARA DEBUG: Veja no console o que está sendo enviado
-            console.log('URL da requisição:', url);
-            console.log('Filtros ativos:', { categoria: currentCategoria, loja: currentLoja, termo: termoBusca });
-
             const response = await fetch(url);
             
             if (!response.ok) {
@@ -49,12 +50,8 @@ document.addEventListener('DOMContentLoaded', function() {
 
             const produtos = await response.json();
             
-            // LOG PARA DEBUG: Veja o que foi recebido
-            console.log('Produtos recebidos:', produtos.length, 'itens');
-            if (produtos.length > 0) {
-                console.log('Exemplo de produto:', produtos[0]); // Primeiro item para verificar campos
-            }
-
+            console.log('Produtos recebidos:', produtos.length, 'itens'); // DEBUG
+            
             productsContainer.innerHTML = '';
 
             if (!Array.isArray(produtos) || produtos.length === 0) {
@@ -74,17 +71,76 @@ document.addEventListener('DOMContentLoaded', function() {
                 `;
                 productsContainer.appendChild(productCard);
             });
-
         } catch (error) {
             console.error('Erro ao carregar produtos:', error.message);
-            const productsContainer = document.getElementById('products-container');
-            if (productsContainer) {
-                 productsContainer.innerHTML = `<p class="no-products">Ocorreu um erro ao carregar os produtos: ${error.message}</p>`;
-            }
+            productsContainer.innerHTML = `<p class="no-products">Ocorreu um erro ao carregar os produtos: ${error.message}</p>`;
         }
     }
 
-    // Função para cadastrar produto via API (mantida inalterada)
+    // --- LÓGICA DE EVENTOS ---
+    
+    // Filtros de Categoria
+    if (categoryButtons.length > 0) {
+        categoryButtons.forEach(button => {
+            button.addEventListener('click', function() {
+                categoryButtons.forEach(btn => btn.classList.remove('active'));
+                this.classList.add('active');
+                currentCategoria = this.dataset.categoria || null;
+                carregarProdutos();
+            });
+        });
+    }
+
+    // Filtros de Loja
+    if (storeButtons.length > 0) {
+        storeButtons.forEach(button => {
+            button.addEventListener('click', function() {
+                storeButtons.forEach(btn => btn.classList.remove('active'));
+                this.classList.add('active');
+                currentLoja = this.dataset.loja || null;
+                carregarProdutos();
+            });
+        });
+    }
+
+    // Botão de Busca
+    if (searchButton) {
+        searchButton.addEventListener('click', function(e) {
+            e.preventDefault();
+            currentSearchTerm = searchInput.value.trim();
+            carregarProdutos();
+        });
+    }
+
+    // Busca por Enter no campo de texto
+    if (searchInput) {
+        searchInput.addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                currentSearchTerm = searchInput.value.trim();
+                carregarProdutos();
+            }
+        });
+    }
+
+    // Botão Limpar Filtros
+    if (clearButton) {
+        clearButton.addEventListener('click', function() {
+            currentCategoria = null;
+            currentLoja = null;
+            currentSearchTerm = '';
+            
+            if (searchInput) searchInput.value = '';
+            categoryButtons.forEach(btn => btn.classList.remove('active'));
+            storeButtons.forEach(btn => btn.classList.remove('active'));
+            
+            console.log('Filtros limpos.'); // DEBUG
+            carregarProdutos();
+        });
+    }
+
+    // --- LÓGICA DO FORMULÁRIO DE CADASTRO ---
+    
     async function cadastrarProduto(dados) {
         try {
             const response = await fetch('/api/cadastrar-produto', {
@@ -106,112 +162,36 @@ document.addEventListener('DOMContentLoaded', function() {
 
             const result = await response.json();
             return { success: true, message: result.message };
-
         } catch (error) {
             console.error('Erro no cadastro:', error.message);
             return { success: false, error: error.message };
         }
     }
 
-    // Lógica para o formulário de cadastro (mantida inalterada)
-    const formProduto = document.getElementById('cadastro-produto-form');
     if (formProduto) {
         formProduto.addEventListener('submit', async (e) => {
             e.preventDefault();
-
             const formData = new FormData(formProduto);
             
             const submitBtn = formProduto.querySelector('button[type="submit"]');
-            const originalText = submitBtn.innerHTML;
-            submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Cadastrando...';
-            submitBtn.disabled = true;
-
-            const resultado = await cadastrarProduto(formData);
-            
-            if (resultado.success) {
-                alert('Produto cadastrado com sucesso!');
-                formProduto.reset();
-                // Recarrega produtos após cadastro
-                carregarProdutos();
-            } else {
-                alert(`Erro: ${resultado.error}`);
-            }
-            
-            submitBtn.innerHTML = originalText;
-            submitBtn.disabled = false;
-        });
-    }
-
-    // Lógica para a vitrine de produtos (se o elemento existir)
-    const productsContainer = document.getElementById('products-container');
-    if (productsContainer) {
-        const searchInput = document.querySelector('.search-bar input');
-        const searchButton = document.querySelector('.search-bar button');
-        const filterButtons = document.querySelectorAll('.filters button');
-        const storeButtons = document.querySelectorAll('.stores button');
-
-        // Carrega produtos iniciais sem filtros
-        carregarProdutos();
-
-        // Filtros de Categoria: Agora permite múltiplos? Não, mas ativa apenas um por grupo
-        filterButtons.forEach(button => {
-            button.addEventListener('click', function() {
-                // Remove active apenas do grupo de categorias
-                filterButtons.forEach(btn => btn.classList.remove('active'));
-                this.classList.add('active');
-                currentCategoria = this.dataset.categoria || null; // Atualiza o filtro ativo
-                console.log('Categoria selecionada:', currentCategoria); // Debug
-                carregarProdutos(); // Recarrega com todos os filtros ativos
-            });
-        });
-        
-        // Filtros de Loja: Similar, grupo separado
-        storeButtons.forEach(button => {
-            button.addEventListener('click', function() {
-                // Remove active apenas do grupo de lojas
-                storeButtons.forEach(btn => btn.classList.remove('active'));
-                this.classList.add('active');
-                currentLoja = this.dataset.loja || null; // Atualiza o filtro ativo
-                console.log('Loja selecionada:', currentLoja); // Debug
-                carregarProdutos(); // Recarrega com todos os filtros ativos
-            });
-        });
-
-        // Search Button: Limpa categorias e lojas? Não mais, mas pode combinar com elas
-        if (searchButton) {
-            searchButton.addEventListener('click', function(e) {
-                e.preventDefault();
-                const termoBusca = searchInput.value.trim();
-                // Não limpa mais os outros filtros – permite combinação
-                // Se quiser limpar: currentCategoria = null; currentLoja = null; e remove active
-                console.log('Busca por termo:', termoBusca); // Debug
-                carregarProdutos();
-            });
-        }
-
-        if (searchInput) {
-            searchInput.addEventListener('keypress', function(e) {
-                if (e.key === 'Enter') {
-                    e.preventDefault();
-                    const termoBusca = searchInput.value.trim();
-                    console.log('Busca por Enter:', termoBusca); // Debug
+            if (submitBtn) {
+                const originalText = submitBtn.innerHTML;
+                submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Cadastrando...';
+                submitBtn.disabled = true;
+                const resultado = await cadastrarProduto(formData);
+                if (resultado.success) {
+                    alert('Produto cadastrado com sucesso!');
+                    formProduto.reset();
                     carregarProdutos();
+                } else {
+                    alert(`Erro: ${resultado.error}`);
                 }
-            });
-        }
-
-        // Botão Limpar Filtros (adicione no HTML: <button id="clear-filters">Limpar</button>)
-        const clearButton = document.getElementById('clear-filters');
-        if (clearButton) {
-            clearButton.addEventListener('click', function() {
-                currentCategoria = null;
-                currentLoja = null;
-                searchInput.value = ''; // Limpa search
-                filterButtons.forEach(btn => btn.classList.remove('active'));
-                storeButtons.forEach(btn => btn.classList.remove('active'));
-                console.log('Filtros limpos'); // Debug
-                carregarProdutos();
-            });
-        }
+                submitBtn.innerHTML = originalText;
+                submitBtn.disabled = false;
+            }
+        });
     }
+
+    // Carga inicial dos produtos ao carregar a página
+    carregarProdutos();
 });

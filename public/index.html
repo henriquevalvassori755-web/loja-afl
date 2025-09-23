@@ -82,24 +82,40 @@
                 </div>
             </section><br><br>
   <header>
-    <h1>Vitrine de Produtos</h1>
+    <h1>Vitrine de Produtos</h1>
+    
+    <div class="filters">
+        <div class="filter-group">
+            <h3>Categorias</h3>
+            <nav class="category-filters">
+                                <button class="filter-btn" data-categoria="todos">Todos</button>
+                <button class="filter-btn" data-categoria="casa">Casa</button>
+                <button class="filter-btn" data-categoria="beleza">Beleza</button>
+                <button class="filter-btn" data-categoria="eletronicos">Eletrônicos</button>
+                <button class="filter-btn" data-categoria="eletrodomesticos">Eletrodomésticos</button>
+                <button class="filter-btn" data-categoria="celular">Celular</button>
+                <button class="filter-btn" data-categoria="computadores">Computadores</button>
+            </nav>
+        </div>
 
-    <br><br>
-    
-    <nav class="filters">
-      <button class="filter-btn" data-category="todos">Todos</button>
-      <button class="filter-btn" data-category="casa">Casa</button>
-      <button class="filter-btn" data-category="beleza">Beleza</button>
-      <button class="filter-btn" data-category="eletronicos">Eletrônicos</button>
-      <button class="filter-btn" data-category="eletrodomesticos">Eletrodomésticos</button>
-      <button class="filter-btn" data-category="celular">Celular</button>
-      <button class="filter-btn" data-category="computadores">Computadores</button>
-    </nav>
-     <div class="search-bar">
-                <input type="text" placeholder="Buscar produtos...">
-                <button><i class="fa-solid fa-magnifying-glass"></i></button>
-            </div>
-  </header>
+        <div class="filter-group stores">
+            <h3>Lojas</h3>
+            <nav class="store-filters">
+                                <button class="filter-btn" data-loja="Shopee">Shopee</button>
+                <button class="filter-btn" data-loja="Mercado Livre">Mercado Livre</button>
+ <button class="filter-btn" data-loja="Amazon">Amazon</button>
+ </nav>
+</div>
+</div>
+
+ <div class="search-bar">
+<input type="text" placeholder="Buscar produtos...">
+<button><i class="fa-solid fa-magnifying-glass"></i></button>
+ </div>
+
+    <button id="clear-filters">Limpar Filtros</button>
+
+</header>
   
   <main id="products-container">
     
