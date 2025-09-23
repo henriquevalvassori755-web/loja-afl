@@ -98,6 +98,7 @@ app.get('/api/produtos', async (req, res) => {
 });
 
 // Rota para cadastrar um novo produto com upload de imagem (mantida inalterada)
+// Rota para cadastrar um novo produto com upload de imagem
 app.post('/api/cadastrar-produto', upload.single('imagem'), async (req, res) => {
     const { nome, categoria, descricao, preco, loja, link } = req.body;
     const imagemFile = req.file;
@@ -127,7 +128,8 @@ app.post('/api/cadastrar-produto', upload.single('imagem'), async (req, res) => 
 
         const imagem_url = publicUrlData.publicUrl;
 
-        const { error: insertError, data: insertData } = await supabase
+        // Corrigido: Removida a tentativa de obter 'data' na inserção
+        const { error: insertError } = await supabase
             .from('produtos')
             .insert([{
                 nome,
@@ -145,7 +147,9 @@ app.post('/api/cadastrar-produto', upload.single('imagem'), async (req, res) => 
             return res.status(500).json({ error: 'Erro ao cadastrar produto.' });
         }
 
-        res.status(201).json({ message: 'Produto cadastrado com sucesso!', id: insertData[0].id });
+        // Corrigido: Retorna apenas a mensagem de sucesso
+        res.status(201).json({ message: 'Produto cadastrado com sucesso!' });
+
     } catch (err) {
         console.error('Erro no servidor:', err);
         res.status(500).json({ error: 'Erro no servidor.' });
