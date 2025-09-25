@@ -1,10 +1,8 @@
 // Importa as bibliotecas necessárias
-require('dotenv').config();
 const express = require('express');
 const { createClient } = require('@supabase/supabase-js');
 const path = require('path');
 const multer = require('multer');
-const serverless = require('serverless-http'); // <-- Adicionada a biblioteca
 
 // Inicializa o aplicativo Express
 const app = express();
@@ -13,7 +11,7 @@ const app = express();
 const upload = multer({ storage: multer.memoryStorage() });
 
 // Configura o middleware para servir arquivos estáticos da pasta 'public'
-app.use(express.static(path.join(__dirname, 'public')));
+app.use(express.static(path.join(__dirname, '..', 'public')));
 app.use(express.json()); // Middleware para processar JSON
 
 // Recupera as variáveis de ambiente para conexão com o Supabase
@@ -156,5 +154,5 @@ app.post('/api/cadastrar-produto', upload.single('imagem'), async (req, res) => 
     }
 });
 
-// Exporta a aplicação para ser usada pelo Netlify Functions.
-module.exports.handler = serverless(app);
+// Vercel detecta a exportação do app Express
+module.exports = app;
