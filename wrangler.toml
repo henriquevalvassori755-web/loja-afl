@@ -1,5 +1,0 @@
-name = "nome-do-seu-projeto-cloudflare"
-# O `build_output_dir` é o equivalente do `publish` no Netlify.
-# Ele informa ao Cloudflare Pages onde encontrar os arquivos estáticos após o build.
-[pages]
-build_output_dir = "public"
