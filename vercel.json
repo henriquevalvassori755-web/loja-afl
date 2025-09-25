@@ -2,17 +2,17 @@
 "version": 2,
 "builds": [
 {
-"src": "public//*",
+"src": "./",
 "use": "@vercel/static-build",
 "config": {
 "distDir": "public"
 }
 },
 {
-"src": "netlify/functions/server.js",
+"src": ".netlify/functions/server.js",
 "use": "@vercel/node",
 "config": {
-"includeFiles": "public//"
+"includeFiles": "./"
 }
 }
 ],
@@ -22,7 +22,7 @@
 "dest": ".netlify/functions/server.js"
 },
 {
-"src": "/(.*)",
+"src": "./",
 "dest": "/public/$1"
 }
 ]
