@@ -1,29 +1,8 @@
 {
-"version": 2,
-"builds": [
+"rewrites": [
 {
-"src": "./",
-"use": "@vercel/static-build",
-"config": {
-"distDir": "public"
-}
-},
-{
-"src": ".netlify/functions/server.js",
-"use": "@vercel/node",
-"config": {
-"includeFiles": "./"
-}
-}
-],
-"routes": [
-{
-"src": "/api/(.)",
-"dest": ".netlify/functions/server.js"
-},
-{
-"src": "./",
-"dest": "/public/$1"
+"source": "/api/(.*)",
+"destination": "/.netlify/functions/server.js"
 }
 ]
 }
