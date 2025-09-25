@@ -19,7 +19,7 @@
 "routes": [
 {
 "src": "/api/(.)",
-"dest": "netlify/functions/server.js"
+"dest": ".netlify/functions/server.js"
 },
 {
 "src": "/(.*)",
